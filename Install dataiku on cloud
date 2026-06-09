@@ -1,0 +1,160 @@
+Skip to end of metadata
+Created by Joseba Elcano Esparza on Nov 22, 2022
+Go to start of metadata
+Once the dependencies have been installed in the Linux VM instance we can proceed to install the required Node (Design, Automation or API).
+
+See Dependencies installation page to install the required dependencies
+
+Disk space
+
+Make sure that there is enough space in the installation data Folder. If necessary is possible to mount a data folder into an existing Disk following this documentation https://docs.microsoft.com/en-us/azure/virtual-machines/linux/attach-disk-portal
+
+
+
+To install the required node, follow the next bash scripts:
+
+User
+
+The following scripts cannot be run by super-user. Ideally the installation should be performed by a user created specifically for this purpose.
+
+
+
+Design Node
+$ ls -l
+-rw-rw-r-- 1 dataiku dataiku 159284660 Feb  4 15:20 dataiku-dss-VERSION
+-r-------- 1 dataiku dataiku       786 Jan 31 07:42 license.json
+ 
+$ dataiku-dss-VERSION/installer.sh -d dss_data -l license.json -p 10000
+-d → directory where the Design Node will be installed
+
+-l → path to the .json license file
+
+-p → port that the node will use
+
+Automation Node
+$ ls -l
+-rw-rw-r-- 1 dataiku dataiku 159284660 Feb  4 15:20 dataiku-dss-VERSION
+-r-------- 1 dataiku dataiku       786 Jan 31 07:42 license.json
+ 
+$ dataiku-dss-VERSION/installer.sh -t automation -d dss_data -l license.json -p 10000
+-d → directory where the Automation Node will be installed
+
+-l → path to the .json license file
+
+-p → port that the node will use
+
+API Node
+$ ls -l
+-rw-rw-r-- 1 dataiku dataiku 159284660 Feb  4 15:20 dataiku-dss-VERSION
+-r-------- 1 dataiku dataiku       786 Jan 31 07:42 license.json
+ 
+$ dataiku-dss-VERSION/installer.sh -t api -d dss_data -l license.json -p 10000
+-d → directory where the API Node will be installed
+
+-l → path to the .json license file
+
+-p → port that the node will use
+
+
+
+
+
+
+
+AFTER INSTALLATION
+
+
+Once the DSS instance is installed in the RED HAT VM you will need to follow a few steps in the machine:
+
+
+
+Disable the Firewalld
+sudo systemctl disable firewalld
+
+
+      2. Enable Nginx to autorun when starting up
+
+sudo systemctl enable nginx
+
+
+      3. Set SELinux as 'Permissive' mode
+
+sudo nano /etc/selinux/config
+ 
+#set the 'SELINUX=permissive'
+ 
+#and reboot the Vm
+sudo reboot
+
+
+      4. Create a SSL .key file from the .jks one
+
+openssl x509 -in dataiku_zurich_com.cer -outform PEM -out dataiku_zurich_com.pem
+openssl x509 -outform der -in dataiku_zurich_com.pem -out dataiku_zurich_com.der
+ 
+openssl x509 -inform der -in /etc/security/keystore/dataiku_zurich_com.der -out /etc/security/keystore/dataiku_zurich_com.pem
+keytool -importkeystore -srckeystore /etc/security/keystore/ceala10321_keystore.jks -destkeystore /etc/security/keystore/dataiku_zurich_com.p12 -deststoretype PKCS12
+openssl pkcs12 -in /etc/security/keystore/dataiku_zurich_com.p12 -nodes -nocerts -out /etc/security/keystore/dataiku_zurich_com.key
+
+
+     5. Proxy Nginx to the 443 port
+
+sudo nano /etc/nginx/conf.d/dss_proxy.conf
+ 
+### content of the file
+# nginx reverse proxy configuration for Dataiku Science Studio
+ 
+server {
+    listen 443 ssl;
+    server_name  dataiku-dev.zurich.com;
+ 
+    ssl_certificate /etc/security/certificates/dataiku-dev.cer;
+    ssl_certificate_key /etc/security/keystore/dataiku_zurich_com.key;
+ 
+ 
+    location / {
+        proxy_pass http://127.0.0.1:11000;
+        proxy_redirect off;
+        proxy_read_timeout 3600;
+        proxy_send_timeout 600;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 0;
+    }
+}
+
+
+     6. Automate DSS autostart
+
+
+
+sudo EDITOR=nano crontab -e
+ 
+*/10 * * * * /root/autostartdss_design.sh
+####
+ 
+#File
+ 
+root/autostartdss_design.sh
+ 
+# content of the file
+#######################################
+#!/bin/bash
+ 
+DSS_USER=$(ls -l /data/dataiku/bin/dss | awk -F ' ' '{print  $3}' | sort | uniq)
+ 
+#API NODE
+status=$( (/bin/su -c '/data/dataiku/bin/dss status' $DSS_USER) 2>&1)
+ 
+if [[ $status == *"not running"* ]]; then
+  /bin/su -c '/data/dataiku/bin/dss start' $DSS_USER
+  /bin/su -c '/data/dataiku/bin/dss status' $DSS_USER
+fi
+#######################################
+7. Install the impersonation framwork
+
+#dss user will be the user which you used to isnstall the Dataiku Instance
+ 
+./bin/dssadmin install-impersonation dssuser
