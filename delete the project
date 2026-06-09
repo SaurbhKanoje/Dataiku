@@ -1,0 +1,42 @@
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+# -*- coding: utf-8 -*-
+import dataiku
+import pandas as pd, numpy as np
+from dataiku import pandasutils as pdu
+import dataikuapi
+
+# Read recipe inputs
+All_project = dataiku.Dataset("All_project")
+All_project_df = All_project.get_dataframe()
+client = dataiku.api_client()
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+def remove_project_with_data(project):
+    #for i in projects:
+    project_keys = client.list_project_keys()
+    if project in project_keys:
+        dataikuapi.dss.project.DSSProject(client, project).delete(clear_managed_datasets=True, clear_output_managed_folders=True, clear_job_and_scenario_logs=True)
+        print("Deleted project: " + project )
+    print( project +" No found" )
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+#remove_project_with_data("TEST_TO_REMOVE")
+All_project_df["projectKey"]
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+All_project_df.drop(columns=["ownerLogin","last_job","last job year", "Outcome"], inplace = True)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+#remove_project_with_data(All_project_df["projectKey"])
+All_project_df
+for i in All_project_df["projectKey"]:
+    if "2024_CI_BROKER_MANAGEMENT_ZIP" != i:
+        remove_project_with_data(i)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+removed_projects_df = All_project_df # For this sample code, simply copy input to output
+
+
+# Write recipe outputs
+removed_projects = dataiku.Dataset("removed_projects")
+removed_projects.write_with_schema(removed_projects_df)
