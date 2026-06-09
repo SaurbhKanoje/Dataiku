@@ -1,0 +1,84 @@
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+# -*- coding: utf-8 -*-
+import dataiku
+import pandas as pd, numpy as np
+from dataiku import pandasutils as pdu
+import dataikuapi
+import os
+import shutil
+# Read recipe inputs
+Only_data = dataiku.Dataset("Only_data")
+Only_data_df = Only_data.get_dataframe()
+client = dataiku.api_client()
+Only_data_df.drop(columns=["ownerLogin","last_job","last job year", "Outcome"], inplace = True)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+uploads_dir = "/data/dataiku/uploads/"
+projects_dir = "/data/dataiku/project_folders/23_PETE_RHODES/"
+
+def get_project_paths(project_key):
+    project = client.get_project(project_key)
+    all_datasets = project.list_datasets()
+    list_folders = []
+    for i in all_datasets:
+        if i["type"] == "UploadedFiles":
+            specific_upload_folder_dir = uploads_dir+project_key
+            #print(specific_upload_folder_dir)
+            if specific_upload_folder_dir not in list_folders:
+                list_folders.append(specific_upload_folder_dir)
+        specific_folder_dir = projects_dir+project_key
+        if specific_folder_dir not in list_folders:
+            list_folders.append(specific_folder_dir)
+    return list_folders
+
+def clear_folder(folder_path):
+    # List all the contents of the folder
+    if os.path.isdir(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    # Remove the file or link
+                    os.remove(file_path)
+                elif os.path.isdir(file_path):
+                    # Remove the directory and all its contents
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f'Failed to delete {file_path}. Reason: {e}')
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+def delete_data_files():
+    for i in Only_data_df['projectKey']:
+        paths = get_project_paths(i)
+        for folder_path in paths:
+            clear_folder(folder_path)
+        
+#delete_data_files()
+#clear_folder("/data/dataiku/uploads/19_IC_PROJECT_EMEA_RACE_CONTROLS")
+delete_data_files()
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+def clear_all_project_data(project):
+
+    datasets = dataiku.Dataset.list(project)
+    for dataset in datasets:
+        dataikuapi.dss.dataset.DSSDataset(client,project,dataset).clear()
+    print("Data cleared in project: " + project)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+#clear_all_project_data("TEST_TO_REMOVE")
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+#Only_data_df.drop(columns=["ownerLogin","last_job","last job year", "Outcome"], inplace = True)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+for i in Only_data_df['projectKey']:
+    #print(i)
+    clear_all_project_data(i)
+
+# -------------------------------------------------------------------------------- NOTEBOOK-CELL: CODE
+data_removed_df = Only_data_df # For this sample code, simply copy input to output
+
+# Write recipe outputs
+data_removed = dataiku.Dataset("data_removed")
+data_removed.write_with_schema(data_removed_df)
